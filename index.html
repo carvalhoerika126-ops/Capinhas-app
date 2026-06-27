@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Vendas - Capinhas</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, updateDoc, deleteDoc,
+    doc, onSnapshot, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import {
+    getStorage, ref, uploadString, getDownloadURL, deleteObject
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBgvVxJ8ame7PfQ1tNFOOklPSCPJ0EF5w4",
+    authDomain: "capinhas-6b78f.firebaseapp.com",
+    projectId: "capinhas-6b78f",
+    storageBucket: "capinhas-6b78f.firebasestorage.app",
+    messagingSenderId: "143113526193",
+    appId: "1:143113526193:web:5febd3243a0bf6408bbb90"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+  const salesCol = collection(db, "sales");
+
+  window.fb = {
+    db, storage, salesCol,
+    addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp,
+    ref, uploadString, getDownloadURL, deleteObject
+  };
+</script>
+<style>
+  :root{
+    --primary:#1f4e78;
+    --primary-dark:#163a59;
+    --accent:#2ecc71;
+    --danger:#e74c3c;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --text:#2c3e50;
+    --muted:#8696a7;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding-bottom:100px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+    color:#fff;
+    padding:22px 18px 60px;
+    text-align:center;
+    position:relative;
+    overflow:hidden;
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    font-weight:700;
+  }
+  header p{
+    margin:6px 0 0;
+    font-size:0.8rem;
+    opacity:0.85;
+  }
+  .sync-status{
+    margin-top:8px;
+    font-size:0.7rem;
+    opacity:0.8;
+    display:inline-block;
+    background:rgba(255,255,255,0.15);
+    padding:3px 10px;
+    border-radius:20px;
+  }
+  .sync-status.online{background:rgba(46,204,113,0.25);}
+  .sync-status.error{background:rgba(231,76,60,0.3);}
+  .summary{
+    margin:-45px 14px 0;
+    background:var(--card);
+    border-radius:16px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.08);
+    display:flex;
+    overflow:hidden;
+    position:relative;
+    z-index:2;
+  }
+  .summary .box{
+    flex:1;
+    padding:14px 8px;
+    text-align:center;
+    border-right:1px solid #eef1f4;
+  }
+  .summary .box:last-child{border-right:none;}
+  .summary .box .label{
+    font-size:0.68rem;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:.5px;
+  }
+  .summary .box .value{
+    font-size:1.05rem;
+    font-weight:700;
+    margin-top:2px;
+  }
+  .summary .box.total .value{color:var(--primary);}
+  .summary .box.pago .value{color:#27ae60;}
+  .summary .box.pendente .value{color:var(--danger);}
+
+  .container{padding:18px 14px 0;}
+
+  .add-btn{
+    width:100%;
+    background:var(--primary);
+    color:#fff;
+    border:none;
+    padding:14px;
+    border-radius:14px;
+    font-size:0.95rem;
+    font-weight:600;
+    margin-bottom:16px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    box-shadow:0 4px 14px rgba(31,78,120,0.3);
+  }
+  .add-btn:active{transform:scale(0.98);}
+
+  .card{
+    background:var(--card);
+    border-radius:16px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.06);
+    margin-bottom:14px;
+    overflow:hidden;
+    display:flex;
+  }
+  .card .photo{
+    width:100px;
+    min-width:100px;
+    height:100px;
+    background:#eef1f4;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font-size:0.7rem;
+    text-align:center;
+    overflow:hidden;
+  }
+  .card .photo img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+  .card .info{
+    flex:1;
+    padding:10px 12px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:3px;
+    min-width:0;
+  }
+  .card .info .desc{
+    font-weight:700;
+    font-size:0.92rem;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .card .info .meta{
+    font-size:0.78rem;
+    color:var(--muted);
+  }
+  .card .info .row-bottom{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:4px;
+  }
+  .card .info .price{
+    font-weight:700;
+    color:var(--primary);
+    font-size:0.95rem;
+  }
+  .badge{
+    font-size:0.68rem;
+    font-weight:700;
+    padding:4px 10px;
+    border-radius:20px;
+    text-transform:uppercase;
+  }
+  .badge.pago{background:#d4f6e0;color:#1e8449;}
+  .badge.pendente{background:#fde2e1;color:#c0392b;}
+
+  .card .actions{
+    display:flex;
+    flex-direction:column;
+    border-left:1px solid #f0f2f5;
+  }
+  .card .actions button{
+    flex:1;
+    border:none;
+    background:none;
+    padding:0 12px;
+    font-size:1rem;
+    color:var(--muted);
+  }
+  .card .actions button.del{color:var(--danger);}
+
+  .empty{
+    text-align:center;
+    color:var(--muted);
+    padding:50px 20px;
+    font-size:0.9rem;
+  }
+
+  /* Modal */
+  .overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.5);
+    display:none;
+    align-items:flex-end;
+    z-index:50;
+  }
+  .overlay.show{display:flex;}
+  .modal{
+    background:#fff;
+    width:100%;
+    border-radius:20px 20px 0 0;
+    padding:20px 18px 28px;
+    max-height:92vh;
+    overflow-y:auto;
+    animation:slideUp .25s ease;
+  }
+  @keyframes slideUp{from{transform:translateY(30px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .modal h2{
+    margin:0 0 16px;
+    font-size:1.1rem;
+    color:var(--primary);
+  }
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;
+    font-size:0.78rem;
+    font-weight:600;
+    color:var(--muted);
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:.4px;
+  }
+  .field input, .field select, .field textarea{
+    width:100%;
+    padding:12px;
+    border:1.5px solid #e3e8ec;
+    border-radius:10px;
+    font-size:0.95rem;
+    background:#fafbfc;
+    font-family:inherit;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{
+    outline:none;
+    border-color:var(--primary);
+  }
+
+  .photo-buttons{
+    display:flex;
+    gap:10px;
+  }
+  .photo-btn{
+    flex:1;
+    height:90px;
+    border:2px dashed #cdd6dd;
+    border-radius:14px;
+    background:#fafbfc;
+    color:var(--primary);
+    font-size:0.85rem;
+    font-weight:600;
+    line-height:1.6;
+  }
+  .photo-btn:active{
+    background:#eef1f4;
+  }
+  .photo-preview{
+    width:100%;
+    height:170px;
+    border-radius:14px;
+    overflow:hidden;
+    margin-bottom:10px;
+    position:relative;
+  }
+  .photo-preview img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .photo-preview .retake{
+    position:absolute;
+    bottom:8px;
+    right:8px;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    border:none;
+    padding:8px 12px;
+    border-radius:8px;
+    font-size:0.78rem;
+    font-weight:600;
+  }
+
+  .status-toggle{
+    display:flex;
+    gap:10px;
+  }
+  .status-toggle button{
+    flex:1;
+    padding:12px;
+    border-radius:10px;
+    border:1.5px solid #e3e8ec;
+    background:#fafbfc;
+    font-weight:600;
+    font-size:0.88rem;
+    color:var(--muted);
+  }
+  .status-toggle button.active.pago{
+    background:#d4f6e0;
+    border-color:#27ae60;
+    color:#1e8449;
+  }
+  .status-toggle button.active.pendente{
+    background:#fde2e1;
+    border-color:var(--danger);
+    color:#c0392b;
+  }
+
+  .modal-actions{
+    display:flex;
+    gap:10px;
+    margin-top:8px;
+  }
+  .modal-actions button{
+    flex:1;
+    padding:14px;
+    border-radius:12px;
+    border:none;
+    font-weight:700;
+    font-size:0.95rem;
+  }
+  .modal-actions .save{background:var(--primary);color:#fff;}
+  .modal-actions .cancel{background:#f0f2f5;color:var(--muted);}
+
+  .fab-close{
+    position:absolute;
+    top:14px;
+    right:14px;
+    background:rgba(255,255,255,0.2);
+    border:none;
+    color:#fff;
+    width:30px;
+    height:30px;
+    border-radius:50%;
+    font-size:1rem;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛍️ Controle de Vendas</h1>
+  <p>Capinhas de Celular</p>
+  <div class="sync-status" id="syncStatus">🔄 Conectando...</div>
+</header>
+
+<div class="summary">
+  <div class="box total">
+    <div class="label">Total</div>
+    <div class="value" id="sumTotal">R$ 0,00</div>
+  </div>
+  <div class="box pago">
+    <div class="label">Pago</div>
+    <div class="value" id="sumPago">R$ 0,00</div>
+  </div>
+  <div class="box pendente">
+    <div class="label">Pendente</div>
+    <div class="value" id="sumPendente">R$ 0,00</div>
+  </div>
+</div>
+
+<div class="container">
+  <button class="add-btn" onclick="openModal()">＋ Adicionar Venda</button>
+  <div id="list"></div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">Nova Venda</h2>
+
+    <div class="field">
+      <label>Foto da capinha</label>
+      <div class="photo-preview" id="photoPreview" style="display:none;">
+        <img id="photoPreviewImg">
+        <button type="button" class="retake" onclick="resetPhotoBox()">Trocar foto</button>
+      </div>
+      <div class="photo-buttons" id="photoButtons">
+        <button type="button" class="photo-btn" onclick="triggerCamera()">📷<br>Tirar Foto</button>
+        <button type="button" class="photo-btn" onclick="triggerGallery()">🖼️<br>Da Galeria</button>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="cameraInput" style="display:none;" onchange="handlePhoto(event)">
+      <input type="file" accept="image/*" id="galleryInput" style="display:none;" onchange="handlePhoto(event)">
+    </div>
+
+    <div class="field">
+      <label>Modelo / Descrição</label>
+      <input type="text" id="descInput" placeholder="Ex: Capinha iPhone 13 - Seleção">
+    </div>
+
+    <div class="field">
+      <label>Data da venda</label>
+      <input type="date" id="dateInput">
+    </div>
+
+    <div class="field">
+      <label>Valor (R$)</label>
+      <input type="number" id="valueInput" placeholder="0,00" step="0.01" inputmode="decimal">
+    </div>
+
+    <div class="field">
+      <label>Status do pagamento</label>
+      <div class="status-toggle">
+        <button type="button" id="btnPago" class="pago" onclick="setStatus('Pago')">✓ Pago</button>
+        <button type="button" id="btnPendente" class="pendente" onclick="setStatus('Pendente')">⏳ Pendente</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Observações (opcional)</label>
+      <textarea id="obsInput" rows="2" placeholder="Ex: Cliente do TikTok, enviar amanhã..."></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeModal()">Cancelar</button>
+      <button class="save" onclick="saveSale()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  ref, uploadString, getDownloadURL, deleteObject
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+const { db, storage, salesCol } = window.fb;
+if(!salesCol){
+  console.error('Firebase não inicializou a tempo.');
+}
+
+let sales = [];
+let currentPhotoDataUrl = null;
+let currentPhotoChanged = false;
+let currentStatus = null;
+let editingId = null;
+let isSaving = false;
+
+function formatBRL(v){
+  return 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function formatDateBR(iso){
+  if(!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function setSyncStatus(state){
+  const el = document.getElementById('syncStatus');
+  el.classList.remove('online','error');
+  if(state === 'online'){
+    el.textContent = '🟢 Sincronizado em tempo real';
+    el.classList.add('online');
+  } else if(state === 'error'){
+    el.textContent = '⚠️ Sem conexão — verifique a internet';
+    el.classList.add('error');
+  } else {
+    el.textContent = '🔄 Conectando...';
+  }
+}
+
+function render(){
+  const list = document.getElementById('list');
+  if(sales.length === 0){
+    list.innerHTML = '<div class="empty">Nenhuma venda registrada ainda.<br>Toque em "Adicionar Venda" para começar.</div>';
+  } else {
+    const sorted = [...sales].sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    list.innerHTML = sorted.map(s => `
+      <div class="card">
+        <div class="photo">
+          ${s.photoUrl ? `<img src="${s.photoUrl}" loading="lazy">` : 'Sem foto'}
+        </div>
+        <div class="info">
+          <div class="desc">${escapeHtml(s.desc || 'Capinha')}</div>
+          <div class="meta">${formatDateBR(s.date)}</div>
+          <div class="row-bottom">
+            <span class="price">${formatBRL(Number(s.value||0))}</span>
+            <span class="badge ${s.status === 'Pago' ? 'pago' : 'pendente'}">${s.status}</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button onclick="editSale('${s.id}')">✏️</button>
+          <button class="del" onclick="deleteSale('${s.id}')">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  updateSummary();
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function updateSummary(){
+  const total = sales.reduce((a,s)=>a+Number(s.value||0),0);
+  const pago = sales.filter(s=>s.status==='Pago').reduce((a,s)=>a+Number(s.value||0),0);
+  const pendente = sales.filter(s=>s.status==='Pendente').reduce((a,s)=>a+Number(s.value||0),0);
+  document.getElementById('sumTotal').textContent = formatBRL(total);
+  document.getElementById('sumPago').textContent = formatBRL(pago);
+  document.getElementById('sumPendente').textContent = formatBRL(pendente);
+}
+
+// --- Listener em tempo real ---
+onSnapshot(salesCol, (snapshot) => {
+  sales = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  render();
+  setSyncStatus('online');
+}, (error) => {
+  console.error(error);
+  setSyncStatus('error');
+});
+
+function openModal(){
+  editingId = null;
+  currentPhotoDataUrl = null;
+  currentPhotoChanged = false;
+  currentStatus = null;
+  document.getElementById('modalTitle').textContent = 'Nova Venda';
+  document.getElementById('descInput').value = '';
+  document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+  document.getElementById('valueInput').value = '';
+  document.getElementById('obsInput').value = '';
+  document.getElementById('cameraInput').value = '';
+  document.getElementById('galleryInput').value = '';
+  resetPhotoBox();
+  resetStatusButtons();
+  document.getElementById('overlay').classList.add('show');
+}
+
+function closeModal(){
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function resetStatusButtons(){
+  document.getElementById('btnPago').classList.remove('active');
+  document.getElementById('btnPendente').classList.remove('active');
+}
+
+function setStatus(status){
+  currentStatus = status;
+  resetStatusButtons();
+  if(status === 'Pago') document.getElementById('btnPago').classList.add('active');
+  else document.getElementById('btnPendente').classList.add('active');
+}
+
+function triggerCamera(){
+  document.getElementById('cameraInput').click();
+}
+
+function triggerGallery(){
+  document.getElementById('galleryInput').click();
+}
+
+function showPhotoPreview(dataUrl){
+  document.getElementById('photoPreviewImg').src = dataUrl;
+  document.getElementById('photoPreview').style.display = 'block';
+  document.getElementById('photoButtons').style.display = 'none';
+}
+
+function resetPhotoBox(){
+  document.getElementById('photoPreview').style.display = 'none';
+  document.getElementById('photoButtons').style.display = 'flex';
+  document.getElementById('photoPreviewImg').src = '';
+}
+
+function compressImage(dataUrl, maxSize = 1000, quality = 0.75){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if(width > height && width > maxSize){
+        height = Math.round(height * (maxSize/width));
+        width = maxSize;
+      } else if(height > maxSize){
+        width = Math.round(width * (maxSize/height));
+        height = maxSize;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+
+function handlePhoto(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  if(file.size > 12 * 1024 * 1024){
+    alert('Essa foto é muito grande. Tenta uma foto menor ou tirada com menos resolução.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    const compressed = await compressImage(e.target.result);
+    currentPhotoDataUrl = compressed;
+    currentPhotoChanged = true;
+    showPhotoPreview(compressed);
+  };
+  reader.onerror = function(){
+    alert('Não consegui carregar essa foto. Tenta outra.');
+  };
+  reader.readAsDataURL(file);
+}
+
+function setSaveButtonLoading(loading){
+  const btn = document.querySelector('.modal-actions .save');
+  btn.disabled = loading;
+  btn.textContent = loading ? 'Salvando...' : 'Salvar';
+}
+
+async function saveSale(){
+  if(isSaving) return;
+  const desc = document.getElementById('descInput').value.trim();
+  const date = document.getElementById('dateInput').value;
+  const value = parseFloat(document.getElementById('valueInput').value);
+  const obs = document.getElementById('obsInput').value.trim();
+
+  if(!desc){ alert('Coloca o modelo/descrição da capinha.'); return; }
+  if(!date){ alert('Coloca a data da venda.'); return; }
+  if(isNaN(value) || value < 0){ alert('Coloca um valor válido.'); return; }
+  if(!currentStatus){ alert('Escolhe se foi Pago ou está Pendente.'); return; }
+
+  isSaving = true;
+  setSaveButtonLoading(true);
+
+  try{
+    let photoUrl = undefined;
+
+    if(currentPhotoChanged && currentPhotoDataUrl){
+      const path = `capinhas/${Date.now()}.jpg`;
+      const storageRef = ref(storage, path);
+      await uploadString(storageRef, currentPhotoDataUrl, 'data_url');
+      photoUrl = await getDownloadURL(storageRef);
+    }
+
+    if(editingId){
+      const updateData = { desc, date, value, obs, status: currentStatus, updatedAt: serverTimestamp() };
+      if(photoUrl !== undefined) updateData.photoUrl = photoUrl;
+      await updateDoc(doc(salesCol, editingId), updateData);
+    } else {
+      await addDoc(salesCol, {
+        desc, date, value, obs,
+        status: currentStatus,
+        photoUrl: photoUrl || null,
+        createdAt: serverTimestamp()
+      });
+    }
+    closeModal();
+  } catch(err){
+    console.error(err);
+    alert('Não consegui salvar. Verifica sua internet e tenta de novo.');
+  } finally {
+    isSaving = false;
+    setSaveButtonLoading(false);
+  }
+}
+
+function editSale(id){
+  const s = sales.find(x=>x.id===id);
+  if(!s) return;
+  editingId = id;
+  currentPhotoDataUrl = null;
+  currentPhotoChanged = false;
+  currentStatus = s.status;
+  document.getElementById('modalTitle').textContent = 'Editar Venda';
+  document.getElementById('descInput').value = s.desc;
+  document.getElementById('dateInput').value = s.date;
+  document.getElementById('valueInput').value = s.value;
+  document.getElementById('obsInput').value = s.obs || '';
+  if(s.photoUrl){
+    showPhotoPreview(s.photoUrl);
+  } else {
+    resetPhotoBox();
+  }
+  resetStatusButtons();
+  setStatus(s.status);
+  document.getElementById('overlay').classList.add('show');
+}
+
+async function deleteSale(id){
+  if(!confirm('Tem certeza que quer excluir essa venda?')) return;
+  try{
+    await deleteDoc(doc(salesCol, id));
+  } catch(err){
+    console.error(err);
+    alert('Não consegui excluir. Verifica sua internet e tenta de novo.');
+  }
+}
+
+// Expor funções usadas via onclick no HTML
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.setStatus = setStatus;
+window.triggerCamera = triggerCamera;
+window.triggerGallery = triggerGallery;
+window.resetPhotoBox = resetPhotoBox;
+window.handlePhoto = handlePhoto;
+window.saveSale = saveSale;
+window.editSale = editSale;
+window.deleteSale = deleteSale;
+
+render();
+</script>
+
+</body>
+</html>
